@@ -1,48 +1,126 @@
-import http from "http"; // Node.js core module (like browser APIs, but for servers)
-import fs from "fs/promises"; // File system with Promises (no callbacks!)
-import url from "url"; // URL parsing (similar to `window.location` but server-side)
-import path from "path"; // Path utilities (like frontend `new URL()` but for files)
+import http from "http";
 
-const { PORT } = process.env || 8080;
+const PORT = process.env.PORT || 3000;
 
-const __filename = url.fileURLToPath(import.meta.url); // Converts `file://` to OS path
-const __dirname = path.dirname(__filename); // Gets directory path
-// console.log(__filename, __dirname);
+// Simulated database with multiple resources
+let resources = [];
+let idCounter = 1; // Simulating unique IDs
 
-// Simple Example of server for handling incoming HTTP requests
-const server = http.createServer(async (req, res) => {
-  try {
-    if (req.method === "GET") {
-      let filePath;
-      if (req.url === "/") {
-        filePath = path.join(__dirname, "public", "index.html");
-      } else if (req.url === "/about") {
-        filePath = path.join(__dirname, "public", "about.html");
-      } else {
-        res.writeHead(404, { "Content-Type": "text/html" });
-        res.write("<h1>Page not found</h1>");
-        res.end();
-        return;
-      }
-      res.writeHead(200, { "Content-Type": "text/html" });
-      const data = await fs.readFile(filePath);
-      res.write(data);
-      res.end();
-    } else {
-      throw new Error("Method not allowed");
+const server = http.createServer((req, res) => {
+  const method = req.method;
+  const url = req.url;
+
+  // Function to calculate and set Content-Length
+  const sendResponse = (res, statusCode, body) => {
+    const bodyString = JSON.stringify(body);
+    res.setHeader("Content-Length", Buffer.byteLength(bodyString));
+    res.writeHead(statusCode);
+    res.end(bodyString);
+  };
+
+  // Set common headers
+  res.setHeader("Content-Type", "application/json");
+
+  // Function to collect request body data
+  const collectRequestBody = (callback) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => callback(body));
+  };
+
+  // Handle API requests
+  if (url.startsWith("/resources")) {
+    const parts = url.split("/");
+    const id = parts.length === 3 ? parseInt(parts[2]) : null;
+
+    switch (method) {
+      case "GET":
+        if (id) {
+          const resource = resources.find((r) => r.id === id);
+          if (resource) sendResponse(res, 200, resource);
+          else sendResponse(res, 404, { error: "Resource not found" });
+        } else {
+          sendResponse(res, 200, resources);
+        }
+        break;
+
+      case "POST":
+        collectRequestBody((body) => {
+          try {
+            const newResource = JSON.parse(body);
+            newResource.id = idCounter++; // Assign a unique ID
+            resources.push(newResource);
+            sendResponse(res, 201, { created: newResource });
+          } catch (err) {
+            sendResponse(res, 400, { error: "Invalid JSON" });
+          }
+        });
+        break;
+
+      case "PUT":
+        if (!id) {
+          sendResponse(res, 400, { error: "PUT requires an ID" });
+          return;
+        }
+        collectRequestBody((body) => {
+          try {
+            const updatedData = JSON.parse(body);
+            let index = resources.findIndex((r) => r.id === id);
+            if (index !== -1) {
+              resources[index] = { id, ...updatedData }; // Completely replace
+              sendResponse(res, 200, { updated: resources[index] });
+            } else {
+              sendResponse(res, 404, { error: "Resource not found" });
+            }
+          } catch (err) {
+            sendResponse(res, 400, { error: "Invalid JSON" });
+          }
+        });
+        break;
+
+      case "PATCH":
+        if (!id) {
+          sendResponse(res, 400, { error: "PATCH requires an ID" });
+          return;
+        }
+        collectRequestBody((body) => {
+          try {
+            const patchData = JSON.parse(body);
+            let resource = resources.find((r) => r.id === id);
+            if (resource) {
+              Object.assign(resource, patchData); // Merge partial updates
+              sendResponse(res, 200, { patched: resource });
+            } else {
+              sendResponse(res, 404, { error: "Resource not found" });
+            }
+          } catch (err) {
+            sendResponse(res, 400, { error: "Invalid JSON" });
+          }
+        });
+        break;
+
+      case "DELETE":
+        if (!id) {
+          sendResponse(res, 400, { error: "DELETE requires an ID" });
+          return;
+        }
+        let index = resources.findIndex((r) => r.id === id);
+        if (index !== -1) {
+          resources.splice(index, 1);
+          sendResponse(res, 200, { deleted: true });
+        } else {
+          sendResponse(res, 404, { error: "Resource not found" });
+        }
+        break;
+
+      default:
+        sendResponse(res, 405, { error: "Method Not Allowed" });
     }
-  } catch (err) {
-    if (err.message === "Method not allowed") {
-      res.writeHead(405, { "Content-Type": "text/plain" });
-      res.end("Method Not Allowed");
-    } else {
-      res.writeHead(500, { "Content-Type": "text/plain" });
-      res.end("Server Error");
-    }
+  } else {
+    sendResponse(res, 404, { error: "Endpoint not found" });
   }
 });
 
-// listen on a port
 server.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT} `);
+  console.log(`API server is running on port ${PORT}`);
 });
