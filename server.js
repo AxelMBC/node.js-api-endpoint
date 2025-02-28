@@ -3,27 +3,25 @@ import fs from "fs";
 
 const PORT = process.env.PORT || 3000;
 
-let resources = [{ id: 1, toDo: "Buy Clothes", completed: false }];
+let resources = [{ id: 0, toDo: "Buy Clothes", completed: false }];
 let idCounter = 1; // Simulating unique IDs
 
 const server = http.createServer((req, res) => {
   const method = req.method;
   const url = req.url;
+  console.log(`URL is: ${url} and the REQ Method is: ${method}`)
 
-  // Función para establecer las cabeceras y Content-Length (el body ya es un string)
   const setHeaders = (res, statusCode, body) => {
     res.setHeader("Content-Length", Buffer.byteLength(body));
     res.writeHead(statusCode);
   };
 
-  // Función para enviar la respuesta (convierte el objeto a string)
   const sendResponse = (res, statusCode, body) => {
     const bodyString = JSON.stringify(body);
     setHeaders(res, statusCode, bodyString);
     res.end(bodyString);
   };
 
-  // Cabecera común
   res.setHeader("Content-Type", "application/json");
 
   // Función para recolectar el cuerpo de la solicitud
