@@ -1,34 +1,39 @@
 import http from "http";
+import fs from "fs";
 
 const PORT = process.env.PORT || 3000;
 
-// Simulated database with multiple resources
-let resources = [];
+let resources = [{ id: 1, toDo: "Buy Clothes", completed: false }];
 let idCounter = 1; // Simulating unique IDs
 
 const server = http.createServer((req, res) => {
   const method = req.method;
   const url = req.url;
 
-  // Function to calculate and set Content-Length
+  // Función para establecer las cabeceras y Content-Length (el body ya es un string)
+  const setHeaders = (res, statusCode, body) => {
+    res.setHeader("Content-Length", Buffer.byteLength(body));
+    res.writeHead(statusCode);
+  };
+
+  // Función para enviar la respuesta (convierte el objeto a string)
   const sendResponse = (res, statusCode, body) => {
     const bodyString = JSON.stringify(body);
-    res.setHeader("Content-Length", Buffer.byteLength(bodyString));
-    res.writeHead(statusCode);
+    setHeaders(res, statusCode, bodyString);
     res.end(bodyString);
   };
 
-  // Set common headers
+  // Cabecera común
   res.setHeader("Content-Type", "application/json");
 
-  // Function to collect request body data
+  // Función para recolectar el cuerpo de la solicitud
   const collectRequestBody = (callback) => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
     req.on("end", () => callback(body));
   };
 
-  // Handle API requests
+  // Manejo de las peticiones API
   if (url.startsWith("/resources")) {
     const parts = url.split("/");
     const id = parts.length === 3 ? parseInt(parts[2]) : null;
@@ -44,11 +49,30 @@ const server = http.createServer((req, res) => {
         }
         break;
 
+      case "HEAD":
+        if (id) {
+          const resource = resources.find((r) => r.id === id);
+          if (resource) {
+            const bodyString = JSON.stringify(resource);
+            setHeaders(res, 200, bodyString);
+            res.end(); // No se envía cuerpo
+          } else {
+            const bodyString = JSON.stringify({ error: "Resource not found" });
+            setHeaders(res, 404, bodyString);
+            res.end();
+          }
+        } else {
+          const bodyString = JSON.stringify(resources);
+          setHeaders(res, 200, bodyString);
+          res.end();
+        }
+        break;
+
       case "POST":
         collectRequestBody((body) => {
           try {
             const newResource = JSON.parse(body);
-            newResource.id = idCounter++; // Assign a unique ID
+            newResource.id = idCounter++; // Asigna un ID único
             resources.push(newResource);
             sendResponse(res, 201, { created: newResource });
           } catch (err) {
@@ -67,7 +91,7 @@ const server = http.createServer((req, res) => {
             const updatedData = JSON.parse(body);
             let index = resources.findIndex((r) => r.id === id);
             if (index !== -1) {
-              resources[index] = { id, ...updatedData }; // Completely replace
+              resources[index] = { id, ...updatedData }; // Reemplaza completamente
               sendResponse(res, 200, { updated: resources[index] });
             } else {
               sendResponse(res, 404, { error: "Resource not found" });
@@ -88,7 +112,7 @@ const server = http.createServer((req, res) => {
             const patchData = JSON.parse(body);
             let resource = resources.find((r) => r.id === id);
             if (resource) {
-              Object.assign(resource, patchData); // Merge partial updates
+              Object.assign(resource, patchData); // Mezcla las actualizaciones parciales
               sendResponse(res, 200, { patched: resource });
             } else {
               sendResponse(res, 404, { error: "Resource not found" });
