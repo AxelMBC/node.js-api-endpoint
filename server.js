@@ -41,7 +41,7 @@ const server = http.createServer((req, res) => {
   };
 
   // Rutas para frases motivacionales
-  if (url.startsWith("/frases")) {
+  if (url.startsWith("/quotes")) {
     const parts = url.split("/");
     const id = parts.length === 3 ? parseInt(parts[2]) : null;
 
